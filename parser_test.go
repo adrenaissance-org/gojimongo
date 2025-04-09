@@ -6,49 +6,57 @@ import (
 
 func TestParser(t *testing.T) {
 	queries := map[string]bool{
-		"$.hello":                     true,
-		"$['hello']":                  true,
-		"$['hello'][0]":               true,
-		"$.store.book[0].title":       true,
-		"$..author":                   true,
-		"$..book[?(@.price<10)]":      true,
-		"$..book[?(@.price > 10)]":    true,
-		"$..book[?(@.price > 10 && @.price < 30)]": true,
-		"$..book[?(@.title)]":         true,
-		"$..book[0:3]":                true,
-		"$..book[:3]":                 true,
-		"$..book[1:]":                 true,
-		"$..book[::-1]":               true,
-		"$[*]":                        true,
-		"$..*":                        true,
-		"@.price":                     true,
-		"@.books[1].title":            true,
-		"$..book[?(@.price==null)]":   true,
-		"$..book[?(@.price!=null)]":   true,
-		"$..book[?(@.available==true)]": true,
-		"$..book[?(@.available==false)]": true,
-		"$..book[?(@.price>=10)]":     true,
-		"$..book[?(@.price<=10)]":     true,
-		"$..[0]":                      true,
-		"$..book[::]":                 true, // missing slice values
-		"$.store..book":               true, // double dot in middle
-		// "$..book[?(@.price - 1 < 9)]": true,
-		"$.length()":                  false,
-		"$.store.length()":            false,
+		"$.hello":                     					true,
+		"$['hello']":                  					true,
+		"$['hello'][0]":               					true,
+		"$.store.book[0].title":       					true,
+		"$..author":                   					true,
+		"$..book[?(@.price<10)]":      					true,
+		"$..book[?(@.price > 10)]":    					true,
+		"$..book[?(@.price > 10 && @.price < 30)]": 	true,
+		"$..book[?(@.title)]":         					true,
+		"$..book[0:3]":                					true,
+		"$..book[:3]":                 					true,
+		"$..book[1:]":                 					true,
+		"$..book[::-1]":               					true,
+		"$..book[::-1(]":               				false,
+		"$..book[::-1:]":               				false,
+		"$..book[::-1,]":               				false,
+		"$[?@int(count(@.devices) >= 10)]":				true,
+		"$[*]":                        					true,
+		"$[*,]":                        				false,
+		"$..":                        					false,
+		"$....":                        				false,
+		"@.price":                     					true,
+		"@.books[1].title":            					true,
+		"$..book[?(@.price==null)]":   					true,
+		"$..book[?(@.price!=null)]":   					true,
+		"$..book[?(@.available==true)]": 				true,
+		"$..book[?(@.available==false)]": 				true,
+		"$..book[?(@.price>=10)]":     					true,
+		"$..book[?(@.price<=10)]":     					true,
+		"$..[0]":                      					true,
+		"$..book[::]":                				true, // missing slice values
+		"$.store..book":               					true, // double dot in middle
 
+		// "$..book[?(@.price - 1 < 9)]": true,
+		"$.length()":                  					false,
+		"$.store.length()":            					false,
 		// Invalid queries
-		"$..book[?(@.price >> 10)]":   false, // invalid operator
-		"$..book[?(@.price = 10)]":    false, // single =
-		"$..book[?(@.price >< 10)]":   false,
-		"$..book[?(@.price <)]":       false,
-		"$..book[?()]":                false,
-		"$['unclosed":                 false,
-		"$.store.[book]":              false,
-		"$..book[?(@.price &&)]":      false,
-		"$..book[?(&& @.price)]":      false,
-		"$[?(@.price < 10)":           false, // unclosed filter
-		"$[]": 						   false,
-		"":                            false, // empty
+		"$..book[?(@.price >> 10)]":   					false, // invalid operator
+		"$..book[?(@.price = 10)]":    					false, // single =
+		"$..book[?(@.price >< 10)]":   					false,
+		"$..book[?(@.price <)]":       					false,
+		"$..book[?()]":                					false,
+		"$['unclosed":                 					false,
+		"$.store.[book]":              					false,
+		"$..book[?(@.price &&)]":      					false,
+		"$..book[?(&& @.price)]":      					false,
+		"$[?(@.price < 10)":           					false, // unclosed filter
+		"$[]": 						   					false,
+		"":                          					false, // empty
+		"$.name[?(@int(@.name) > @str($.name))]":		true,
+		"$.name[@str(5)]": true,
 	}
 	c := &Compiler{}
 	for query, shouldPass := range queries {

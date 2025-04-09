@@ -1,14 +1,13 @@
 package gojimongo
 
 import (
-	"fmt"
+	// "fmt"
 )
 
 type Compiler struct {
 	lexer 	*Lexer
 	parser 	*Parser
 }
-
 
 func (c *Compiler) Compile(value string) (Query, error) {
 	c.lexer = &Lexer{}
@@ -24,8 +23,8 @@ func (c *Compiler) Compile(value string) (Query, error) {
 	return q, nil
 }
 
-func (c *Compiler) Represent(q Query) {
-	v := NewVisitorJSON()
-	q.accept(v)
-	fmt.Println(v.Result())
-}
+// func (c *Compiler) Represent(q Query) {
+// 	v := NewVisitorJSON()
+// 	q.accept(v)
+// 	fmt.Println(v.Result())
+// }

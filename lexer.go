@@ -110,15 +110,6 @@ func (l *Lexer) Run(value string) error {
 				case "false":
 					l.lexemes = append(l.lexemes, identifier)
 					l.tokens = append(l.tokens, FALSE)
-				case "match":
-					l.lexemes = append(l.lexemes, identifier)
-					l.tokens = append(l.tokens, MATCH)
-				case "count":
-					l.lexemes = append(l.lexemes, identifier)
-					l.tokens = append(l.tokens, COUNT)
-				case "length":
-					l.lexemes = append(l.lexemes, identifier)
-					l.tokens = append(l.tokens, LENGTH)
 				default:
 					l.lexemes = append(l.lexemes, identifier)
 					l.tokens = append(l.tokens, IDENTIFIER)
@@ -132,8 +123,7 @@ func (l *Lexer) Run(value string) error {
 }
 
 func (l *Lexer) handleStringLiteral(value string, quote byte) error {
-	// Start scanning the string literal
-	l.curr++ // Move past the opening quote
+	l.curr++
 	for l.curr < len(value) && value[l.curr] != quote {
 		if value[l.curr] == '\\' { // Handle escaped characters
 			l.curr++ // Skip the backslash

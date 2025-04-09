@@ -76,16 +76,12 @@ func (s *SliceSelector) accept(visitor Visitor) {
 	visitor.visitSliceSelector(s)
 }
 
-func (s *IndexSelector) accept(visitor Visitor) {
-	visitor.visitIndexSelector(s)
+func (s *FilterSelector) accept(visitor Visitor) {
+	visitor.visitFilterSelector(s)
 }
 
 func (s *NameSelector) accept(visitor Visitor) {
 	visitor.visitNameSelector(s)
-}
-
-func (s *FilterSelector) accept(visitor Visitor) {
-	visitor.visitFilterSelector(s)
 }
 
 func (s *WildCardSelector) accept(visitor Visitor) {
@@ -111,4 +107,24 @@ func (q *AbsQuery) accept(visitor Visitor) {
 
 func (q *RelQuery) accept(visitor Visitor) {
 	visitor.visitRelQuery(q)
+}
+
+func (q *TypedIntExpr) accept(visitor Visitor) {
+	visitor.visitTypedIntExpr(q)
+}
+
+// func (q *TypedDoubleExpr) accept(visitor Visitor) {
+// 	visitor.visitTypedDoubleExpr(q)
+// }
+
+func (q *TypedBoolExpr) accept(visitor Visitor) {
+	visitor.visitTypedBoolExpr(q)
+}
+
+func (q *TypedStringExpr) accept(visitor Visitor) {
+	visitor.visitTypedStringExpr(q)
+}
+
+func (q *TypedArrayExpr) accept(visitor Visitor) {
+	visitor.visitTypedArrayExpr(q)
 }

@@ -14,6 +14,7 @@ const (
 	PARSER_ERROR_UNKNOWN = "Unknown error"
 	PARSER_ERROR_MISSING_OPENING_PAREN_FUNCTION = "missing opening parenthesis in function expression"
 	PARSER_ERROR_MISSING_CLOSING_PAREN_FUNCTION = "missing closing parenthesis in function expression"
+	PARSER_ERROR_TRAILING_COMMA_BRACKET_SELECTOR = "trailing comma in bracket selector"
 	PARSER_ERROR_UNTERMINATED_ERROR = "unterminated query"
 	PARSER_ERROR_NOTANINTEGER = "failed to parse integer"
 	PARSER_ERROR_MISSING_CLOSING_PAREN = "missing closing parenthesis"
@@ -22,6 +23,7 @@ const (
 	PARSER_ERROR_TERMINATING_SELECTORS_WITH_COMMA = "extra comma at the end of bracketed selectors"
 	PARSER_ERROR_INCORRECT_DESCENDANT_SEGMENT_SYNTAX = "incorrect descendant segment syntax"
 	PARSER_ERROR_EMPTY_BRACKETED_SELECTORS = "empty bracketed selectors"
+	PARSER_ERROR_EXPECTED_TYPE = "expected type after @"
 )
 
 type Visitor interface {
@@ -30,6 +32,10 @@ type Visitor interface {
 	visitIntExpr(value *IntExpr)
 	visitTrueExpr(value *TrueExpr)
 	visitFalseExpr(value *FalseExpr)
+	visitTypedStringExpr(value *TypedStringExpr)
+	visitTypedArrayExpr(value *TypedArrayExpr)
+	visitTypedIntExpr(value *TypedIntExpr)
+	visitTypedBoolExpr(value *TypedBoolExpr)
 	visitNullExpr(value *NullExpr)
 	visitParExpr(value *ParExpr)
 	visitFnExpr(value *FnExpr)
@@ -48,11 +54,10 @@ type Visitor interface {
 	visitEqeqExpr(value *EqeqExpr)
 	visitNeqExpr(value *NeqExpr)
 
-	visitSliceSelector(value *SliceSelector)
-	visitIndexSelector(value *IndexSelector)
-	visitNameSelector(value *NameSelector)
 	visitFilterSelector(value *FilterSelector)
 	visitWildcardSelector(value *WildCardSelector)
+	visitSliceSelector(value *SliceSelector)
+	visitNameSelector(value *NameSelector)
 
 	visitDotChildSegment(value *DotChildSegment)
 	visitChildSegment(value *ChildSegment)
@@ -94,10 +99,10 @@ type DescendantSegment 	struct { selectors []Selector }
 type Selector interface{ 
 	accept(visitor Visitor)
 }
-type NameSelector struct { name string }
+
 type WildCardSelector struct {}
-type IndexSelector struct { value Expr }
 type SliceSelector struct { start Expr; stop Expr; step Expr }
+type NameSelector struct { value string }
 type FilterSelector struct { cond Expr }
 type FnExpr struct { name string; params []Expr }
 
@@ -129,6 +134,25 @@ type AbsQueryExpr interface {
 type RelQueryExpr interface {
 	accept(Visitor)
 }
+
+// @string($.results)
+type TypedStringExpr struct { value Expr }
+
+// @int(@.results) <= @.double(@.results)
+type TypedIntExpr struct { value Expr}
+
+// @double(@.results) 
+type TypedDecimalExpr struct { value Expr }
+
+// @bool(@.results)
+type TypedBoolExpr struct { value Expr }
+
+// @array(@.results)
+type TypedArrayExpr struct { value Expr }
+
+// @object(@.results)
+type TypedObjectExpr struct { value Expr }
+
 
 type AndExpr 	struct { lhs Expr; rhs Expr }
 type OrExpr 	struct { lhs Expr; rhs Expr }
@@ -227,20 +251,6 @@ func(p *Parser) segment() (Segment, error) {
 	}
 }
 
-// here we have 5 types of selectors we can choose from
-// index
-// slice
-// name
-// wildcard
-// filter
-
-// index and slice expect an integer, both positive and negative
-// name and wildcard are strings, but wildcard corresponds to the '*' string
-// filter expects a QUESTION_MARK
-
-// TODO: this is buggy: we might also have a colon
-// we also need to allow this type of selectors [0, 1, "name"]
-// so basically a selector can be just any literal or slice
 func (p *Parser) bracketedChildSegment() (Segment, error) {
 	segment := &ChildSegment{}
 	selectors, err := p.bracketedSelectors()
@@ -263,16 +273,7 @@ func (p *Parser) dotChildSegment() (Segment, error) {
 
 // dot selectors only "one" string and wildcard
 func (p *Parser) dotSelector() (Selector, error) {
-	if p.matchCurr(IDENTIFIER) {
-		lex := p.currLex()
-		p.advTok()
-		p.advLex()
-		return &NameSelector{name: lex}, nil
-	} else if p.matchCurr(STAR){
-		return &WildCardSelector{}, nil
-	} else {
-		return nil, p.error(PARSER_ERROR_DOT_CHILD_ERROR)
-	}
+	return p.literal()
 }
 
 func (p *Parser) descendantSegment() (Segment, error) {
@@ -299,51 +300,41 @@ func (p *Parser) descendantSegment() (Segment, error) {
 	return &DescendantSegment{selectors: selectors}, nil
 }
 
+func (p *Parser) maybeSlice() bool {
+	return p.matchCurr(COLON) || (p.matchCurr(INTEGER) && p.matchNext(COLON)) ||
+		p.matchCurr(MINUS) && p.matchNext(INTEGER) && p.matchOffset(2, COLON) 
+}
+
 func (p *Parser) bracketedSelectors() ([]Selector, error) {
 	selectors := []Selector{}
 	for !p.matchCurr(RBRACK) {
 		if !p.notatend() {
 			return nil, p.error(PARSER_ERROR_MISSING_CLOSING_BRACKET)
-		}
+		} 
 
-		if p.matchCurr(STAR) {
-			p.advTok()
-			selectors = append(selectors, &WildCardSelector{})
-		} else if p.matchCurr(MINUS) && p.matchNext(INTEGER) && p.matchOffset(2, COLON) || 
-			p.matchCurr(COLON) || 
-			p.matchCurr(INTEGER) && p.matchNext(COLON) {
+		if p.maybeSlice() {
 			slice, err := p.slice()
 			if err != nil {
 				return nil, err
 			}
 			selectors = append(selectors, slice)
-		} else if p.matchCurr(MINUS) || p.matchCurr(INTEGER) {
-			index, err := p.index()
+			continue
+		} else {
+			value, err := p.expr()
 			if err != nil {
 				return nil, err
 			}
-			selectors = append(selectors, index)
-		} else if p.matchCurr(STRING) {
-			name, err := p.name()
-			if err != nil {
-				return nil, err
+			selectors = append(selectors, value)
+		}
+
+		if p.matchCurr(COMMA) {
+			if p.matchNext(RBRACK) {
+				return nil, p.error(PARSER_ERROR_TRAILING_COMMA_BRACKET_SELECTOR) 
 			}
-			selectors = append(selectors, name)
-		} else if p.matchCurr(COMMA) {
 			p.advTok()
-			// check if we are not terminating with a comma
-			if p.matchCurr(RBRACK) {
-				return nil, p.error(PARSER_ERROR_TERMINATING_SELECTORS_WITH_COMMA)
-			}
-		} else if p.matchCurr(QUESTION_MARK) {
-			p.advTok()
-			filter, err := p.filter()
-			if err != nil {
-				return nil, err
-			}
-			selectors = append(selectors, filter)
 		}
 	}
+
 	if len(selectors) == 0 {
 		return nil, p.error(PARSER_ERROR_EMPTY_BRACKETED_SELECTORS)
 	}
@@ -358,56 +349,6 @@ func (p *Parser) name() (Selector, error) {
 	p.advTok()
 	p.advLex()
 	return &StringExpr{value: lex}, nil
-}
-
-func (p *Parser) slice() (Selector, error) {
-	selector := &SliceSelector{}
-	sliceParts := []Expr{nil, nil, nil} // start, stop, step
-	partIndex := 0
-
-	expectValue := func() (Expr, error) {
-		if p.matchCurr(MINUS) || p.matchCurr(INTEGER) {
-			return p.unary()
-		}
-		return nil, nil
-	}
-
-	for p.notatend() {
-		if partIndex >= 3 {
-			return nil, p.error(PARSER_ERROR_SYNTAX_SLICE)
-		}
-
-		// Handle empty values like `:` or `::`
-		if p.matchCurr(COLON) {
-			sliceParts[partIndex] = nil
-		} else {
-			value, err := expectValue()
-			if err != nil {
-				return nil, err
-			}
-			sliceParts[partIndex] = value
-		}
-
-		partIndex++
-
-		if !p.matchCurr(COLON) {
-			break
-		}
-		p.advTok()
-	}
-
-	selector.start = sliceParts[0]
-	selector.stop = sliceParts[1]
-	selector.step = sliceParts[2]
-	return selector, nil
-}
-
-func (p *Parser) index() (Selector, error) {
-	expr, err := p.unary()
-	if err != nil {
-		return nil, err
-	}
-	return &IndexSelector{value: expr}, nil
 }
 
 func (p *Parser) filter() (Selector, error) {
@@ -591,7 +532,7 @@ func (p *Parser) unary() (UnaryExpr, error) {
 // string | boolean | integer | null | identifier | par expr
 // ===========================================================
 
-func (p *Parser) literal() (LiteralExpr, error) {
+func (p *Parser) literal() (Expr, error) {
 	if !p.notatend() {
 		return nil, p.error(PARSER_ERROR_UNTERMINATED_ERROR)
 	}
@@ -599,15 +540,115 @@ func (p *Parser) literal() (LiteralExpr, error) {
 	switch tok {
 	case STRING: return p.string()
 	case INTEGER: return p.int()
+	case QUESTION_MARK:
+		p.advTok()
+		return p.filter()
 	case FALSE: return p.false(), nil
 	case TRUE: return p.true(), nil
 	case NULL: return p.null(), nil
 	case LPAREN: return p.par()
-	case IDENTIFIER: return p.fn()
+	case IDENTIFIER: 
+	if p.matchNext(LPAREN) {
+		return p.fn()
+	} else {
+		lex := p.currLex()
+		p.advLex()
+		p.advTok()
+		return &NameSelector{value: lex}, nil	
+	}
 	case DOLLAR: p.advTok(); return p.absQuery()
-	case AT: p.advTok(); return p.relQuery()
+	case STAR: p.advTok(); return &WildCardSelector{}, nil
+	case AT: 
+		p.advTok(); 
+		if p.matchCurr(IDENTIFIER) {
+			return p.typed()
+		} else {
+			return p.relQuery()
+		}
 	}
 	return nil, p.error(PARSER_ERROR_UNEXEXPECTED_TOKEN)
+}
+
+func (p *Parser) slice() (Selector, error) {
+	selector := &SliceSelector{}
+	sliceParts := []Expr{nil, nil, nil} // start, stop, step
+	partIndex := 0
+
+	expectValue := func() (Expr, error) {
+		if p.matchCurr(MINUS) || p.matchCurr(INTEGER) {
+			return p.unary()
+		}
+		return nil, nil
+	}
+
+	for p.notatend() {
+		if partIndex >= 3 {
+			return nil, p.error(PARSER_ERROR_SYNTAX_SLICE)
+		}
+
+		// Handle empty values like `:` or `::`
+		if p.matchCurr(COLON) {
+			sliceParts[partIndex] = nil
+		} else {
+			value, err := expectValue()
+			if err != nil {
+				return nil, err
+			}
+			sliceParts[partIndex] = value
+		}
+
+		partIndex++
+
+		if !p.matchCurr(COLON) {
+			break
+		}
+		p.advTok()
+	}
+
+	selector.start = sliceParts[0]
+	selector.stop = sliceParts[1]
+	selector.step = sliceParts[2]
+	return selector, nil
+}
+func (p *Parser) typed() (Expr, error) {
+	lex := p.currLex()
+	switch lex {
+	case "int":
+		p.advTok()
+		p.advLex()
+		expr, err := p.par() 
+		if err != nil {
+			return nil, err
+		}
+		return &TypedIntExpr{ value: expr }, nil
+	case "str":
+		p.advTok()
+		p.advLex()
+		expr, err := p.par() 
+		if err != nil {
+			return nil, err
+		}
+		return &TypedStringExpr{ value: expr }, nil
+	case "bool":
+		p.advTok()
+		p.advLex()
+		expr, err := p.par() 
+		if err != nil {
+			return nil, err
+		}
+		return &TypedBoolExpr{ value: expr }, nil
+	case "array":
+		p.advTok()
+		p.advLex()
+		expr, err := p.par() 
+		if err != nil {
+			return nil, err
+		}
+		return &TypedArrayExpr{ value: expr }, nil
+	default:
+		return nil, p.error(PARSER_ERROR_EXPECTED_TYPE)
+	}
+
 }
 
 func (p *Parser) string() (LiteralExpr, error) {
