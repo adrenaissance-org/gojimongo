@@ -23,6 +23,7 @@ func TestParser(t *testing.T) {
 		"$..book[::-1:]":               				false,
 		"$..book[::-1,]":               				false,
 		"$[?@int(count(@.devices) >= 10)]":				true,
+		"@.store..books[?(@.price < 20 && @.author == \"John\")].title[0:10],@.store.magazines[*].title,@.store..*[?(@.published == true || length(@.title) == 5)].authors[1:5:2]": true,
 		"$[*]":                        					true,
 		"$[*,]":                        				false,
 		"$..":                        					false,
